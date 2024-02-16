@@ -1,13 +1,17 @@
+import logging
 import os
-from dotenv import load_dotenv
+import re
+
 import discord
 from discord.ext import commands, tasks
-import re
-from reminder_tasks import setup_tasks, ReminderView
-import logging
+from discord.message import Message
+from dotenv import load_dotenv
+
+from database_operations import (AnalisisButton)
+from reminder_tasks import ReminderView, setup_tasks
 
 # Configuración del logging
-logging.basicConfig(level=logging.DEBUG,  # Cambia a INFO en producción
+logging.basicConfig(level=logging.INFO,  # Cambia a INFO en producción
                     format='%(asctime)s:%(levelname)s:%(name)s: %(message)s',
                     datefmt='%d-%b-%y %H:%M:%S',
                     filename='bot_error.log',  # Archivo de logs
@@ -51,8 +55,6 @@ async def on_command_error(ctx, error):
     else:
         logger.exception(f'Unhandled command error: {error}')
 
-
-
 # Eventos para manejar la conectividad
 @bot.event
 async def on_disconnect():
@@ -86,55 +88,61 @@ async def keep_alive_task():
     except Exception as e:
         logger.exception("An error occurred while trying to perform keep alive task:", exc_info=e)
 
-
-
 @bot.event
-async def on_message(message):
+async def on_message(message:Message):
     # Registra en el log cuando se recibe un mensaje
     logger.debug('Received a message.')
-    
+
     # Ignora los mensajes del propio bot o de canales que no sean el canal de origen
     if message.author == bot.user or message.channel.id != id_canal_origen:
         logger.debug('Message is from the bot itself or not from the origin channel, ignoring.')
         return
 
     try:
-        # Crea un embed para enviar al canal
-        embed = discord.Embed(color=discord.Color.blue())
-        bloques = re.split(r'(\[tituloinicio\].*?\[titulofin\])', message.content, flags=re.DOTALL)
-        eventos_para_botones = []
-
-        for bloque in bloques:
-            if '[tituloinicio]' in bloque and '[titulofin]' in bloque:
-                titulo = re.search(r'\[tituloinicio\](.*?)\[titulofin\]', bloque).group(1)
-                embed.add_field(name=titulo, value='', inline=False)
-            else:
-                eventos = re.split(r'(\[evento\d+\])', bloque, flags=re.DOTALL)
-                for i in range(1, len(eventos), 2):
-                    evento_texto = eventos[i + 1].strip()
-                    evento_texto = re.sub(r'(\[evento\d+\])\s+(\S+)', r'\1 **\2**', evento_texto)
-                    
-                    if '[remember]' in evento_texto:
-                        eventos_para_botones.append(evento_texto)
-                        evento_texto = evento_texto.replace('[remember]', '').strip()
-                    
-                    evento_texto = re.sub(r'\[linki\](https?://[^\s\[]+)\[linke\](\S+)', r'[\2](\1)', evento_texto)
-                    evento_texto = evento_texto.replace(')(', ') - (')
-                    embed.add_field(name='', value=evento_texto, inline=False)
-
-        # Crea una vista con botones si es necesario
-        view = ReminderView(eventos_para_botones) if eventos_para_botones else None
-
-        # Envía el mensaje al canal de destino
+        # Preparar y enviar el mensaje al canal de destino
         for id_canal in ids_canales_destino:
+            # The id_canal is needed for analysis button
+            # It is needed to point the new thread to the correct target channel
+
+            # Crea un embed para enviar al canal
+            embed = discord.Embed(color=discord.Color.blue())
+            view = discord.ui.View()  # Crea la vista aquí y añade botones a medida que los necesites
+
+            bloques = re.split(r'(\[tituloinicio\].*?\[titulofin\])', message.content, flags=re.DOTALL)
+            eventos_para_botones = []
+
+            for bloque in bloques:
+                if '[tituloinicio]' in bloque and '[titulofin]' in bloque:
+                    titulo = re.search(r'\[tituloinicio\](.*?)\[titulofin\]', bloque).group(1)
+                    embed.add_field(name=titulo, value='', inline=False)
+                else:
+                    eventos = re.split(r'(\[evento\d+\])', bloque, flags=re.DOTALL)
+                    for i in range(1, len(eventos), 2):
+                        evento_texto = eventos[i + 1].strip()
+                        evento_texto = re.sub(r'(\[evento\d+\])\s+(\S+)', r'\1 **\2**', evento_texto)
+
+                        if '[remember]' in evento_texto:
+                            eventos_para_botones.append(evento_texto)
+                            evento_texto = evento_texto.replace('[remember]', '').strip()
+
+                        evento_texto = re.sub(r'\[linki\](https?://[^\s\[]+)\[linke\](\S+)', r'[\2](\1)', evento_texto)
+                        evento_texto = evento_texto.replace(')(', ') - (')
+                        embed.add_field(name='', value=evento_texto, inline=False)
+
+                        if '[analisis]' in message.content:
+                                # Preparar el botón de análisis
+                                # Inicializa la vista aquí si no se ha hecho antes en el código
+                                view = discord.ui.View()
+                                analisis_button = AnalisisButton(message.id, id_canal)
+                                view.add_item(analisis_button)
+
+        
             canal_destino = bot.get_channel(id_canal)
             if canal_destino:
                 await canal_destino.send(embed=embed, view=view)
             else:
                 logger.error(f"No se encontró el canal con ID {id_canal}")
-
     except Exception as e:
-        # Captura cualquier excepción que ocurra durante el procesamiento del mensaje y la registra
         logger.exception(f'An error occurred while processing a message: {e}')
 
     # Procesa comandos si el mensaje es un comando

@@ -1,7 +1,10 @@
 import logging
-from models import Session, Reminder
-from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
+
+import discord
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from models import Reminder, Session
 
 logger = logging.getLogger('database_operations')
 
@@ -13,9 +16,9 @@ def add_reminder(user_id, custom_id, event_time, guild_id, channel_id, message_i
             custom_id=custom_id,
             event_time=event_time,
             status='pending',
-            guild_id=guild_id,      
-            channel_id=channel_id,  
-            message_id=message_id 
+            guild_id=guild_id,
+            channel_id=channel_id,
+            message_id=message_id
         )
         session.add(new_reminder)
         session.commit()
@@ -49,11 +52,12 @@ def get_pending_reminders():
             Reminder.event_time > current_time,
             Reminder.status == 'pending'
         ).all()
-        return reminders
+        return reminders if reminders else []
     except SQLAlchemyError as e:
         logger.error(f"An error occurred while retrieving pending reminders: {e}", exc_info=True)
     finally:
         session.close()
+    return []
 
 def update_reminder_status(reminder_id, new_status):
     session = Session()
@@ -104,4 +108,44 @@ def delete_notified_reminders():
         logger.error(f"Se produjo un error al eliminar recordatorios notificados: {e}", exc_info=True)
     finally:
         session.close()
-        
+
+class AnalisisButton(discord.ui.Button):
+    def __init__(self, message_id, channel_id):
+        super().__init__(label="Análisis", style=discord.ButtonStyle.grey)
+        self.message_id = message_id
+        self.target_channel_id = channel_id
+
+
+    async def callback(self, interaction: discord.Interaction):
+        # Intenta obtener el thread_id asociado con el message_id.
+
+        thread_id = self.message_id # The message_id is == thread_id
+
+        if thread_id:
+            # Si hay un thread_id asociado, realiza la lógica para copiar mensajes al nuevo hilo
+            original_thread = interaction.client.get_channel(int(thread_id))
+            target_channel = interaction.client.get_channel(self.target_channel_id)
+
+            if original_thread:
+                new_thread = await target_channel.create_thread(name="Análisis de Mensaje")
+                await copy_messages_to_new_thread(interaction.client, thread_id, new_thread)
+                await interaction.response.send_message(f"Los mensajes del hilo {thread_id} han sido copiados al canal de análisis. and channel {target_channel.name}", ephemeral=True)
+            else:
+                await interaction.response.send_message("El hilo original no está disponible.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"No hay un hilo específico asociado para análisis. {self.message_id} ", ephemeral=True)
+
+async def copy_messages_to_new_thread(bot, original_thread_id, new_thread):
+    try:
+        original_thread = bot.get_channel(original_thread_id)
+        if original_thread:
+            # Verifica si original_thread es realmente un Thread y no un Channel regular
+            if isinstance(original_thread, discord.Thread):
+                async for message in original_thread.history(limit=123):  # Ajusta el límite según sea necesario
+                    await new_thread.send(message.content)
+            else:
+                logger.error(f"El ID {original_thread_id} no corresponde a un hilo válido.")
+        else:
+            logger.error(f"No se encontró el hilo con ID {original_thread_id}.")
+    except Exception as e:
+        logger.error(f"Ocurrió un error al copiar mensajes al nuevo hilo: {e}", exc_info=True)
