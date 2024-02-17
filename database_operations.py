@@ -127,22 +127,28 @@ class AnalisisButton(discord.ui.Button):
             target_channel = interaction.client.get_channel(self.target_channel_id)
 
             if original_thread:
-                new_thread = await target_channel.create_thread(name="Análisis de Mensaje")
+                new_thread = await target_channel.create_thread(name= f"Análisis de Mensaje {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}" )
                 await copy_messages_to_new_thread(interaction.client, thread_id, new_thread)
-                await interaction.response.send_message(f"Los mensajes del hilo {thread_id} han sido copiados al canal de análisis. and channel {target_channel.name}", ephemeral=True)
+                await interaction.response.send_message(
+                    f"Los mensajes del hilo {original_thread.name} se han copiado al hilo {new_thread.name} en el canal {target_channel.name}",
+                    ephemeral=True
+                    )
             else:
                 await interaction.response.send_message("El hilo original no está disponible.", ephemeral=True)
         else:
             await interaction.response.send_message(f"No hay un hilo específico asociado para análisis. {self.message_id} ", ephemeral=True)
 
-async def copy_messages_to_new_thread(bot, original_thread_id, new_thread):
+async def copy_messages_to_new_thread(bot, original_thread_id, new_thread: discord.Thread):
     try:
         original_thread = bot.get_channel(original_thread_id)
         if original_thread:
             # Verifica si original_thread es realmente un Thread y no un Channel regular
             if isinstance(original_thread, discord.Thread):
-                async for message in original_thread.history(limit=123):  # Ajusta el límite según sea necesario
-                    await new_thread.send(message.content)
+
+                async for message in original_thread.history(limit=123, oldest_first=True):
+                    if message.content:
+                        await new_thread.send(message.content)
+
             else:
                 logger.error(f"El ID {original_thread_id} no corresponde a un hilo válido.")
         else:
