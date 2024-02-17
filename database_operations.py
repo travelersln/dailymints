@@ -117,26 +117,38 @@ class AnalisisButton(discord.ui.Button):
 
 
     async def callback(self, interaction: discord.Interaction):
-        # Intenta obtener el thread_id asociado con el message_id.
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
-        thread_id = self.message_id # The message_id is == thread_id
+        try:
+            thread_id = self.message_id # The message_id is == thread_id
 
-        if thread_id:
-            # Si hay un thread_id asociado, realiza la lógica para copiar mensajes al nuevo hilo
-            original_thread = interaction.client.get_channel(int(thread_id))
-            target_channel = interaction.client.get_channel(self.target_channel_id)
+            if thread_id:
+                original_thread = interaction.client.get_channel(int(thread_id))
+                target_channel = interaction.client.get_channel(self.target_channel_id)
 
-            if original_thread:
-                new_thread = await target_channel.create_thread(name= f"Análisis de Mensaje {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}" )
-                await copy_messages_to_new_thread(interaction.client, thread_id, new_thread)
-                await interaction.response.send_message(
-                    f"Los mensajes del hilo {original_thread.name} se han copiado al hilo {new_thread.name} en el canal {target_channel.name}",
-                    ephemeral=True
-                    )
+                if original_thread:
+                    
+                    new_thread = await target_channel.create_thread(
+                            name= f"Análisis de Mensaje {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                            message=interaction.message
+                        )
+
+                    await copy_messages_to_new_thread(interaction.client, thread_id, new_thread)
+
+                    await interaction.followup.send(
+                        f"Los mensajes del hilo {original_thread.name} se han copiado al hilo {new_thread.name} en el canal {target_channel.name}",
+                        ephemeral=True
+                        )
+
+                else:
+                    await interaction.followup.send("El hilo original no está disponible.", ephemeral=True)
             else:
-                await interaction.response.send_message("El hilo original no está disponible.", ephemeral=True)
-        else:
-            await interaction.response.send_message(f"No hay un hilo específico asociado para análisis. {self.message_id} ", ephemeral=True)
+                await interaction.followup.send(f"No hay un hilo específico asociado para análisis. {self.message_id} ", ephemeral=True)
+        except discord.errors.NotFound:
+            await interaction.followup.send("El mensaje original no se pudo encontrar.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Ocurrió un error: {e}", ephemeral=True)
+
 
 async def copy_messages_to_new_thread(bot, original_thread_id, new_thread: discord.Thread):
     try:
