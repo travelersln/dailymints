@@ -35,7 +35,7 @@ class ReminderButton(Button):
             # Desactivar el botón si falta menos de 40 minutos para el evento
             if self.disabled or (current_time + timedelta(minutes=40)) >= self.event_time:
                 await interaction.response.send_message(
-                    "This event can no longer be reminded as it's too close to the start time.", 
+                    "This event can no longer be reminded as it's too close to the start time.",
                     ephemeral=True
                 )
                 return  # Terminar la ejecución si el evento está muy cerca
@@ -44,7 +44,7 @@ class ReminderButton(Button):
             exists = check_reminder_exists(interaction.user.id, self.custom_id)
             if exists:
                 await interaction.response.send_message(
-                    "You have already set a reminder for this event.", 
+                    "You have already set a reminder for this event.",
                     ephemeral=True
                 )
                 return  # Terminar la ejecución si el recordatorio ya existe
@@ -58,7 +58,7 @@ class ReminderButton(Button):
             # Notificar al usuario que el recordatorio se ha configurado
             reminder_time = self.event_time - timedelta(minutes=30)
             await interaction.response.send_message(
-                f"Reminder set for {reminder_time.strftime('%Y-%m-%d %H:%M:%S')} UTC.", 
+                f"Reminder set for {reminder_time.strftime('%Y-%m-%d %H:%M:%S')} UTC.",
                 ephemeral=True
             )
 
@@ -68,25 +68,38 @@ class ReminderButton(Button):
             await interaction.response.send_message(
                 "An error occurred while processing your reminder.",
                 ephemeral=True
-                
-            )
-            
 
-class ReminderView(View):
-    def __init__(self, event_texts):
+            )
+
+
+def generate_reminder_button(event_text: str, mint_num: int = 1) -> ReminderButton:
+    # Get the current time in UTC
+    current_time = datetime.utcnow()
+
+    # Extract the event time from the event text (assuming it's a function defined elsewhere)
+    event_time = extract_event_time(event_text)
+
+    # Calculate whether the button should be disabled based on event time
+    disabled = (current_time + timedelta(minutes=40)) >= event_time
+
+    # Create and return a ReminderButton instance with appropriate parameters
+    return ReminderButton(f"Mint {mint_num}", f"reminder_{mint_num}", event_text, disabled=disabled)
+
+class MessageSentView(View):
+    def __init__(self, buttons):
+        # Call the constructor of the parent class (View) with timeout set to None
         super().__init__(timeout=None)
-        current_time = datetime.utcnow()
-        for i, event_text in enumerate(event_texts):
-            event_time = extract_event_time(event_text)
-            disabled = (current_time + timedelta(minutes=40)) >= event_time
-            self.add_item(ReminderButton(f"Mint {i+1}", f"reminder_{i+1}", event_text, disabled=disabled))
+
+        # Add each button provided to the view
+        for button in buttons:
+            self.add_item(button)
 
 
 
 async def send_reminder_view(bot, channel_id, event_texts):
     channel = bot.get_channel(channel_id)
     if channel:
-        view = ReminderView(event_texts)
+        view = MessageSentView(event_texts)
         message = await channel.send("Here are your reminders:", view=view)
         # Actualizar active_views con el ID del mensaje y la vista asociada
         active_views[message.id] = view
@@ -144,8 +157,8 @@ async def update_button_states(bot):
             channel = bot.get_channel(view.channel_id)
             message = await channel.fetch_message(message_id)
             await message.edit(view=view)
-        
+
 def setup_tasks(bot):
     reminder_check.start(bot)
     cleanup_past_reminders.start()
-    update_button_states.start(bot) 
+    update_button_states.start(bot)
