@@ -97,7 +97,6 @@ class MessageSentView(View):
 class ReminderView(View):
     def __init__(self, event_texts):
         super().__init__(timeout=None)
-        current_time = datetime.utcnow()
         for i, event_text in enumerate(event_texts):
             self.add_item(generate_reminder_button(event_text, i+1))
 
