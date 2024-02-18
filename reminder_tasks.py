@@ -94,12 +94,18 @@ class MessageSentView(View):
         for button in buttons:
             self.add_item(button)
 
+class ReminderView(View):
+    def __init__(self, event_texts):
+        super().__init__(timeout=None)
+        current_time = datetime.utcnow()
+        for i, event_text in enumerate(event_texts):
+            self.add_item(generate_reminder_button(event_text, i+1))
 
 
 async def send_reminder_view(bot, channel_id, event_texts):
     channel = bot.get_channel(channel_id)
     if channel:
-        view = MessageSentView(event_texts)
+        view = ReminderView(event_texts)
         message = await channel.send("Here are your reminders:", view=view)
         # Actualizar active_views con el ID del mensaje y la vista asociada
         active_views[message.id] = view
