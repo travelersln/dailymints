@@ -103,6 +103,7 @@ async def on_message(message: Message):
         bloques = re.split(r'(\[tituloinicio\].*?\[titulofin\])', message.content, flags=re.DOTALL)
 
         for id_canal in ids_canales_destino:
+            mint_num = 1
             botones = []
             embed = discord.Embed(color=discord.Color.blue())
             for bloque in bloques:
@@ -111,7 +112,6 @@ async def on_message(message: Message):
                     embed.add_field(name=titulo, value='', inline=False)
                 else:
                     eventos = re.split(r'(\[evento\d+\])', bloque, flags=re.DOTALL)
-                    mint_num = 1
                     for i in range(1, len(eventos), 2):
                         evento_texto = eventos[i + 1].strip()
                         evento_texto = re.sub(r'(\[evento\d+\])\s+(\S+)', r'\1 **\2**', evento_texto)
